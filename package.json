@@ -1,0 +1,23 @@
+{
+  "name": "generals-hjl",
+  "version": "1.0.0",
+  "description": "Generals.io Bot - A Node.js bot for playing generals.io",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "generals.io",
+    "bot",
+    "node.js",
+    "javascript",
+    "game"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "socket.io-client": "^2.4.0"
+  }
+}
+
