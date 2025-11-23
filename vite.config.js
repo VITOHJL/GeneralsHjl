@@ -4,7 +4,8 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 3000,
+    host: true, // 监听所有地址，包括局域网
+    port: 1732,
     open: true
   }
 })

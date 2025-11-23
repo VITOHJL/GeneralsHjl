@@ -1,6 +1,6 @@
 import { useGameStore } from '../store/gameStore'
 
-function GameUI({ onPause, onMenu }) {
+function GameUI({ onPause, onMenu, isPaused = false }) {
   const { gameState, nextTurn } = useGameStore()
 
   if (!gameState) return null
@@ -40,13 +40,13 @@ function GameUI({ onPause, onMenu }) {
           onClick={onPause}
           className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
         >
-          暂停
+          {isPaused ? '继续' : '暂停'}
         </button>
         <button
           onClick={onMenu}
           className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
         >
-          菜单
+          退出
         </button>
       </div>
     </div>

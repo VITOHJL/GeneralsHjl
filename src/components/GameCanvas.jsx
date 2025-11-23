@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { useGameStore } from '../store/gameStore'
 import Renderer from '../game/Renderer'
 
-function GameCanvas() {
+function GameCanvas({ isPaused = false, gameConfig = null }) {
   const canvasRef = useRef(null)
   const rendererRef = useRef(null)
-  const { gameState, initGame, makeMove, nextTurn } = useGameStore()
+  const { gameState, gameEngine, initGame, makeMove, nextTurn } = useGameStore()
   const [selectedTile, setSelectedTile] = useState(null) // {x, y}
   const [mouseDownTile, setMouseDownTile] = useState(null) // 鼠标按下的格子
   const justDraggedRef = useRef(false) // 标记是否刚刚处理了拖拽
@@ -17,31 +17,75 @@ function GameCanvas() {
     // 初始化渲染器
     rendererRef.current = new Renderer(canvas)
     
-    // 初始化游戏
-    if (!gameState) {
-      initGame({
-        width: 25,
-        height: 25,
-        players: 2
-      })
+    // 初始化游戏（由菜单传入配置）
+    // 只有当没有游戏状态且有配置时才初始化
+    if (!gameState && gameConfig) {
+      initGame(gameConfig)
     }
+    
+    // 如果游戏状态存在但没有配置，说明可能是从其他地方进入的，不处理
 
-    // 渲染循环
-    const render = () => {
-      if (rendererRef.current && gameState) {
-        rendererRef.current.render(gameState, selectedTile)
+    // 渲染循环 - 只在状态变化时渲染
+    let animationFrameId = null
+    let lastRenderTime = 0
+    const FPS = 30 // 限制到30fps
+    const frameInterval = 1000 / FPS
+
+    const render = (currentTime) => {
+      // 限制帧率
+      if (currentTime - lastRenderTime >= frameInterval) {
+        if (rendererRef.current && gameState) {
+          rendererRef.current.render(gameState, selectedTile)
+        }
+        lastRenderTime = currentTime
       }
-      requestAnimationFrame(render)
+      animationFrameId = requestAnimationFrame(render)
     }
-    render()
+    animationFrameId = requestAnimationFrame(render)
 
     // 清理
     return () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId)
+      }
       if (rendererRef.current) {
         rendererRef.current.destroy()
       }
     }
   }, [gameState, initGame, selectedTile])
+
+  // AI自动操作
+  useEffect(() => {
+    if (!gameState || gameState.gameOver || isPaused || !gameState.isAIPlayer || !gameEngine) return
+    
+    // 如果当前玩家是AI，自动执行AI决策
+    const timer = setTimeout(() => {
+      const aiDecision = gameEngine.getAIDecision()
+      
+      if (aiDecision) {
+        // AI决定移动
+        const success = makeMove(
+          aiDecision.fromX,
+          aiDecision.fromY,
+          aiDecision.toX,
+          aiDecision.toY,
+          aiDecision.moveType
+        )
+        if (success) {
+          // 移动成功后自动切换到下一个玩家
+          setTimeout(() => nextTurn(), 300) // 延迟300ms让玩家看到AI的操作
+        } else {
+          // 移动失败，也切换到下一个玩家（AI可能做了无效决策）
+          setTimeout(() => nextTurn(), 300)
+        }
+      } else {
+        // AI决定跳过回合
+        nextTurn()
+      }
+    }, 500) // 延迟500ms让玩家看到AI的思考过程
+    
+    return () => clearTimeout(timer)
+  }, [gameState?.currentPlayer, gameState?.isAIPlayer, gameState?.gameOver, isPaused, gameEngine, makeMove, nextTurn])
 
   // 获取点击的格子坐标
   const getTileFromEvent = (e) => {
@@ -74,7 +118,7 @@ function GameCanvas() {
 
   // 处理鼠标按下
   const handleMouseDown = (e) => {
-    if (!gameState || gameState.gameOver) return
+    if (!gameState || gameState.gameOver || isPaused) return
 
     const tile = getTileFromEvent(e)
     if (tile) {
@@ -127,7 +171,7 @@ function GameCanvas() {
       return
     }
     
-    if (!gameState || gameState.gameOver) return
+    if (!gameState || gameState.gameOver || isPaused) return
 
     const tile = getTileFromEvent(e)
     if (!tile) {
