@@ -1,4 +1,14 @@
 // Canvas渲染器
+import strongholdTexture from '../assets/tiles/stronghold.png'
+import capitalTexture from '../assets/tiles/capital.png'
+import obstacleTexture from '../assets/tiles/obstacle.png'
+
+const TILE_TEXTURE_FILES = {
+  stronghold: strongholdTexture,
+  capital: capitalTexture,
+  obstacle: obstacleTexture
+}
+
 class Renderer {
   constructor(canvas) {
     this.canvas = canvas
@@ -14,10 +24,21 @@ class Renderer {
     this.tileSize = 0
     this.offsetX = 0
     this.offsetY = 0
+    this.textures = {}
+    this.loadTextures()
     
     // 离屏Canvas用于静态背景
     this.backgroundCanvas = null
     this.backgroundCtx = null
+  }
+
+  loadTextures() {
+    Object.entries(TILE_TEXTURE_FILES).forEach(([key, relativePath]) => {
+      const img = new Image()
+      img.src = relativePath
+      img.onload = () => this.markAllDirty()
+      this.textures[key] = img
+    })
   }
 
   setupCanvas() {
@@ -191,6 +212,7 @@ class Renderer {
   renderBatch(ctx, map, currentPlayer, selectedTile) {
     // 准备批量数据
     const backgrounds = [] // [{x, y, color}]
+    const texturedTiles = [] // [{x, y, type}]
     const borders = [] // [{x, y, color, width}]
     const texts = [] // [{x, y, text, fontSize}]
     const icons = [] // [{x, y, type}] type: 'stronghold' | 'capital'
@@ -230,6 +252,19 @@ class Renderer {
       // 收集背景
       backgrounds.push({ x: px, y: py, color })
 
+      // 收集贴图
+      let textureType = null
+      if (tile.type === 1) {
+        textureType = 'obstacle'
+      } else if (tile.type === 2) {
+        textureType = 'stronghold'
+      } else if (tile.type === 3) {
+        textureType = 'capital'
+      }
+      if (textureType) {
+        texturedTiles.push({ x: px, y: py, type: textureType })
+      }
+
       // 收集边框
       if (isSelected) {
         borders.push({ x: px, y: py, color: '#fbbf24', width: 3 })
@@ -247,10 +282,12 @@ class Renderer {
       }
 
       // 收集图标
-      if (tile.type === 2) {
-        icons.push({ x: px, y: py, type: 'stronghold' })
-      } else if (tile.type === 3) {
-        icons.push({ x: px, y: py, type: 'capital' })
+      if (!textureType) {
+        if (tile.type === 2) {
+          icons.push({ x: px, y: py, type: 'stronghold' })
+        } else if (tile.type === 3) {
+          icons.push({ x: px, y: py, type: 'capital' })
+        }
       }
     }
 
@@ -258,6 +295,14 @@ class Renderer {
     for (const bg of backgrounds) {
       ctx.fillStyle = bg.color
       ctx.fillRect(bg.x, bg.y, this.tileSize, this.tileSize)
+    }
+
+    // 绘制贴图
+    for (const tex of texturedTiles) {
+      const image = this.textures[tex.type]
+      if (image?.complete) {
+        ctx.drawImage(image, tex.x, tex.y, this.tileSize, this.tileSize)
+      }
     }
 
     // 批量绘制边框

@@ -174,52 +174,28 @@ class GameEngine {
       // 例如：移动7个单位攻击敌方5个单位，剩余2个占领
       const result = moveUnits - toTile.units
       const wasCapital = toTile.type === 3 // 是否是首都
-      const wasStronghold = toTile.type === 2 // 是否是要塞
-      const isSpecialTile = wasCapital || wasStronghold // 是否是要塞或首都
       const capitalOwner = wasCapital ? oldToOwner : null
       
-      console.log(`[战斗] 攻击方: ${moveUnits}, 防守方: ${toTile.units}, result: ${result}, toTile.type: ${toTile.type}, 是首都: ${wasCapital}, 是要塞: ${wasStronghold}, 目标坐标: (${toX}, ${toY})`)
+      console.log(`[战斗] 攻击方: ${moveUnits}, 防守方: ${toTile.units}, result: ${result}, toTile.type: ${toTile.type}, 是首都: ${wasCapital}, 目标坐标: (${toX}, ${toY})`)
       
-      // 特殊规则：占领要塞和首都必须多至少2个兵（result >= 2）
-      // 普通空地：多0个或更多就能占领（result >= 0）
-      if (isSpecialTile && result < 1) {
-        // 要塞/首都：result < 2 时攻击失败（result === 0 或 result === 1）
-        const tileName = wasCapital ? '首都' : '要塞'
-        console.log(`[特殊规则触发] 攻击${tileName}失败: 需要至少多2个单位才能占领${tileName}，实际result=${result}`)
-        // 攻击失败：对方保持原样，继续每回合涨兵
-        // 攻击方的单位全部损失（已经在 fromTile.units -= moveUnits 中处理了）
-        // 防守方单位数减少攻击方的单位数
-        const oldUnits = toTile.units
-        toTile.units = oldUnits - moveUnits
-        // 如果防守方单位数 <= 0，则变成0（但所有权不变）
-        if (toTile.units <= 0) {
-          toTile.units = 0
-        }
-        console.log(`[特殊规则] 防守方单位数: ${oldUnits} -> ${toTile.units}, 所有权不变: ${toTile.owner}`)
-        // 不改变所有权，不触发接管，游戏继续
-        // 注意：这里不return，继续执行后续的日志和检查
-      } else if (result >= 0) {
-        // 占领：剩余单位留在目标格子
-        // 普通空地：result >= 0 就能占领
-        // 要塞/首都：result >= 2 才能占领（上面的 if 已经过滤了 result < 2 的情况）
+      if (result >= 1) {
+        // 占领成功：剩余单位留在目标格子
         toTile.owner = this.currentPlayer
-        toTile.units = result // 占领后单位数为result
+        toTile.units = result
         
         // 如果占领的是首都，需要特殊处理
         if (wasCapital && capitalOwner) {
-          console.log(`[占领首都] 首都被占领，变成要塞，触发接管`)
-          // 首都被占领后变成要塞
-          toTile.type = 2 // STRONGHOLD
-          // 接管该玩家的所有格子
+          console.log('[占领首都] 首都被占领，变成要塞，触发接管')
+          toTile.type = 2 // 首都变成要塞
           this.takeoverPlayerTiles(capitalOwner, this.currentPlayer)
         }
         
-        // 更新索引：从敌方变为己方
         this.updateTileOwnership(toX, toY, oldToOwner, this.currentPlayer)
       } else {
-        // 攻击失败：敌方剩余单位（result < 0）
-        toTile.units = -result
-        // 所有权没变，不需要更新索引
+        // 攻击失败：防守方剩余单位（可能为0），但所有权不变
+        const oldUnits = toTile.units
+        toTile.units = Math.max(0, oldUnits - moveUnits)
+        console.log(`[攻击失败] 目标仍归玩家${oldToOwner}，单位: ${oldUnits} -> ${toTile.units}`)
       }
     }
     
@@ -280,10 +256,14 @@ class GameEngine {
       const tile = this.map.tiles[y][x]
       // 再次检查所有权（因为可能已经被接管了）
       if (tile.owner === defeatedPlayerId) {
-        // 接管格子：单位数除以2向下取整加1
+        // 接管格子：单位数除以2(向上取整)
         tile.owner = conquerorId
-        tile.units = Math.floor(tile.units / 2) + 1
-        
+        if (tile.units%2===0){
+          tile.units = Math.floor(tile.units / 2) 
+        }
+        else{
+          tile.units = Math.floor(tile.units / 2) + 1
+        }
         // 如果这是首都，变成要塞
         if (tile.type === 3) {
           tile.type = 2 // STRONGHOLD
