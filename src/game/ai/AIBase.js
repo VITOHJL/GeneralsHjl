@@ -3,9 +3,8 @@
  * 所有AI实现都应该继承这个类
  */
 class AIBase {
-  constructor(playerId, difficulty = 'medium') {
+  constructor(playerId) {
     this.playerId = playerId
-    this.difficulty = difficulty
   }
 
   /**
@@ -30,7 +29,7 @@ class AIBase {
    * 获取AI的名称
    */
   getName() {
-    return `${this.constructor.name} (${this.difficulty})`
+    return `${this.constructor.name}`
   }
 }
 

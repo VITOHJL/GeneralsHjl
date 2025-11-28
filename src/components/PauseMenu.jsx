@@ -6,8 +6,8 @@ function PauseMenu({ onResume, onMenu }) {
 
   if (!gameState || !playerConfig) return null
 
-  const handlePlayerTypeChange = (playerId, type, aiType = null, difficulty = 'easy') => {
-    setPlayerType(playerId, type, aiType, difficulty)
+  const handlePlayerTypeChange = (playerId, type, aiType = null) => {
+    setPlayerType(playerId, type, aiType)
   }
 
   const handleAddPlayer = () => {
@@ -63,7 +63,7 @@ function PauseMenu({ onResume, onMenu }) {
                       人类
                     </button>
                     <button
-                      onClick={() => handlePlayerTypeChange(playerId, 'ai', AI_TYPES.RANDOM, config.difficulty || 'easy')}
+                      onClick={() => handlePlayerTypeChange(playerId, 'ai', AI_TYPES.RANDOM)}
                       className={`flex-1 px-3 py-1.5 rounded text-sm transition-colors ${
                         config.type === 'ai'
                           ? 'bg-blue-600 hover:bg-blue-700'
@@ -77,29 +77,15 @@ function PauseMenu({ onResume, onMenu }) {
                   {/* AI配置 */}
                   {config.type === 'ai' && (
                     <div className="space-y-1.5 pl-2 border-l-2 border-gray-700">
-                      <div>
-                        <select
-                          value={config.aiType || AI_TYPES.RANDOM}
-                          onChange={(e) => handlePlayerTypeChange(playerId, 'ai', e.target.value, config.difficulty || 'easy')}
-                          className="w-full px-2 py-1 bg-gray-700 rounded text-xs"
-                        >
-                          <option value={AI_TYPES.RANDOM}>{getAIName(AI_TYPES.RANDOM)}</option>
-                          <option value={AI_TYPES.EXPANSION}>{getAIName(AI_TYPES.EXPANSION)}</option>
-                          <option value={AI_TYPES.AGGRESSIVE}>{getAIName(AI_TYPES.AGGRESSIVE)}</option>
-                          <option value={AI_TYPES.BALANCED}>{getAIName(AI_TYPES.BALANCED)}</option>
-                        </select>
-                      </div>
-                      <div>
-                        <select
-                          value={config.difficulty || 'easy'}
-                          onChange={(e) => handlePlayerTypeChange(playerId, 'ai', config.aiType || AI_TYPES.RANDOM, e.target.value)}
-                          className="w-full px-2 py-1 bg-gray-700 rounded text-xs"
-                        >
-                          <option value="easy">简单</option>
-                          <option value="medium">中等</option>
-                          <option value="hard">困难</option>
-                        </select>
-                      </div>
+                      <div className="text-xs text-gray-300">AI类型</div>
+                      <select
+                        value={config.aiType || AI_TYPES.RANDOM}
+                        onChange={(e) => handlePlayerTypeChange(playerId, 'ai', e.target.value)}
+                        className="w-full px-2 py-1 bg-gray-700 rounded text-xs"
+                      >
+                        <option value={AI_TYPES.RANDOM}>{getAIName(AI_TYPES.RANDOM)}</option>
+                        <option value={AI_TYPES.ADAPTIVE}>{getAIName(AI_TYPES.ADAPTIVE)}</option>
+                      </select>
                     </div>
                   )}
                 </div>
@@ -116,12 +102,12 @@ function PauseMenu({ onResume, onMenu }) {
           >
             继续游戏
           </button>
-          <button
+          {/* <button
             onClick={onMenu}
             className="w-full px-6 py-2.5 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors font-semibold"
           >
             返回菜单
-          </button>
+          </button> */}
         </div>
       </div>
     </div>

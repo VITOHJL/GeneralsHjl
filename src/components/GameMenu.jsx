@@ -4,7 +4,7 @@ import { AI_TYPES, getAIName } from '../game/ai/index'
 function GameMenu({ onStartGame }) {
   const [playerConfig, setPlayerConfig] = useState({
     1: { type: 'human' },
-    2: { type: 'ai', aiType: AI_TYPES.RANDOM, difficulty: 'easy' }
+    2: { type: 'ai', aiType: AI_TYPES.RANDOM }
   })
   const [mapSize, setMapSize] = useState('medium') // small, medium, large
 
@@ -13,7 +13,7 @@ function GameMenu({ onStartGame }) {
     if (type === 'human') {
       newConfig[playerId] = { type: 'human' }
     } else {
-      newConfig[playerId] = { type: 'ai', aiType: AI_TYPES.RANDOM, difficulty: 'easy' }
+      newConfig[playerId] = { type: 'ai', aiType: newConfig[playerId]?.aiType || AI_TYPES.RANDOM }
     }
     setPlayerConfig(newConfig)
   }
@@ -22,14 +22,6 @@ function GameMenu({ onStartGame }) {
     const newConfig = { ...playerConfig }
     if (newConfig[playerId] && newConfig[playerId].type === 'ai') {
       newConfig[playerId] = { ...newConfig[playerId], aiType }
-    }
-    setPlayerConfig(newConfig)
-  }
-
-  const handleDifficultyChange = (playerId, difficulty) => {
-    const newConfig = { ...playerConfig }
-    if (newConfig[playerId] && newConfig[playerId].type === 'ai') {
-      newConfig[playerId] = { ...newConfig[playerId], difficulty }
     }
     setPlayerConfig(newConfig)
   }
@@ -174,29 +166,15 @@ function GameMenu({ onStartGame }) {
                     {/* AI配置 */}
                     {config.type === 'ai' && (
                       <div className="space-y-1.5 pl-2 border-l-2 border-gray-700">
-                      <div>
+                        <div className="text-xs text-gray-300">AI类型</div>
                         <select
                           value={config.aiType || AI_TYPES.RANDOM}
                           onChange={(e) => handleAITypeChange(playerId, e.target.value)}
                           className="w-full px-2 py-1 bg-gray-700 rounded text-xs"
                         >
                           <option value={AI_TYPES.RANDOM}>{getAIName(AI_TYPES.RANDOM)}</option>
-                          <option value={AI_TYPES.EXPANSION}>{getAIName(AI_TYPES.EXPANSION)}</option>
-                          <option value={AI_TYPES.AGGRESSIVE}>{getAIName(AI_TYPES.AGGRESSIVE)}</option>
-                          <option value={AI_TYPES.BALANCED}>{getAIName(AI_TYPES.BALANCED)}</option>
+                          <option value={AI_TYPES.ADAPTIVE}>{getAIName(AI_TYPES.ADAPTIVE)}</option>
                         </select>
-                      </div>
-                        <div>
-                          <select
-                            value={config.difficulty || 'easy'}
-                            onChange={(e) => handleDifficultyChange(playerId, e.target.value)}
-                            className="w-full px-2 py-1 bg-gray-700 rounded text-xs"
-                          >
-                            <option value="easy">简单</option>
-                            <option value="medium">中等</option>
-                            <option value="hard">困难</option>
-                          </select>
-                        </div>
                       </div>
                     )}
                   </div>

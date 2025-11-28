@@ -2,37 +2,47 @@ import { useEffect, useRef, useState } from 'react'
 import { useGameStore } from '../store/gameStore'
 import Renderer from '../game/Renderer'
 
-function GameCanvas({ isPaused = false, gameConfig = null }) {
+function GameCanvas({ isPaused = false, gameConfig = null, fastMode = false, onRegisterCameraControls = null }) {
   const canvasRef = useRef(null)
   const rendererRef = useRef(null)
   const { gameState, gameEngine, initGame, makeMove, nextTurn } = useGameStore()
   const [selectedTile, setSelectedTile] = useState(null) // {x, y}
   const [mouseDownTile, setMouseDownTile] = useState(null) // 鼠标按下的格子
   const justDraggedRef = useRef(false) // 标记是否刚刚处理了拖拽
+  const lastClickedTileRef = useRef(null) // 最近一次点击的格子
 
+  // 初始化渲染器（只在挂载/卸载时执行）
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    // 初始化渲染器
     rendererRef.current = new Renderer(canvas)
-    
-    // 初始化游戏（由菜单传入配置）
-    // 只有当没有游戏状态且有配置时才初始化
+
+    return () => {
+      if (rendererRef.current) {
+        rendererRef.current.destroy()
+        rendererRef.current = null
+      }
+    }
+  }, [])
+
+  // 根据配置初始化游戏（状态为空且有配置时）
+  useEffect(() => {
     if (!gameState && gameConfig) {
       initGame(gameConfig)
     }
-    
-    // 如果游戏状态存在但没有配置，说明可能是从其他地方进入的，不处理
+  }, [gameState, gameConfig, initGame])
 
-    // 渲染循环 - 只在状态变化时渲染
+  // 渲染循环：依赖 gameState / selectedTile，但不销毁 renderer
+  useEffect(() => {
+    if (!rendererRef.current) return
+
     let animationFrameId = null
     let lastRenderTime = 0
-    const FPS = 30 // 限制到30fps
+    const FPS = 30
     const frameInterval = 1000 / FPS
 
     const render = (currentTime) => {
-      // 限制帧率
       if (currentTime - lastRenderTime >= frameInterval) {
         if (rendererRef.current && gameState) {
           rendererRef.current.render(gameState, selectedTile)
@@ -41,23 +51,23 @@ function GameCanvas({ isPaused = false, gameConfig = null }) {
       }
       animationFrameId = requestAnimationFrame(render)
     }
+
     animationFrameId = requestAnimationFrame(render)
 
-    // 清理
     return () => {
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId)
       }
-      if (rendererRef.current) {
-        rendererRef.current.destroy()
-      }
     }
-  }, [gameState, initGame, selectedTile])
+  }, [gameState, selectedTile])
 
   // AI自动操作
   useEffect(() => {
     if (!gameState || gameState.gameOver || isPaused || !gameState.isAIPlayer || !gameEngine) return
-    
+
+    const thinkDelay = fastMode ? 0 : 500
+    const afterMoveDelay = fastMode ? 0 : 300
+
     // 如果当前玩家是AI，自动执行AI决策
     const timer = setTimeout(() => {
       const aiDecision = gameEngine.getAIDecision()
@@ -73,47 +83,30 @@ function GameCanvas({ isPaused = false, gameConfig = null }) {
         )
         if (success) {
           // 移动成功后自动切换到下一个玩家
-          setTimeout(() => nextTurn(), 300) // 延迟300ms让玩家看到AI的操作
+          setTimeout(() => nextTurn(), afterMoveDelay)
         } else {
           // 移动失败，也切换到下一个玩家（AI可能做了无效决策）
-          setTimeout(() => nextTurn(), 300)
+          setTimeout(() => nextTurn(), afterMoveDelay)
         }
       } else {
         // AI决定跳过回合
         nextTurn()
       }
-    }, 500) // 延迟500ms让玩家看到AI的思考过程
+    }, thinkDelay)
     
     return () => clearTimeout(timer)
-  }, [gameState?.currentPlayer, gameState?.isAIPlayer, gameState?.gameOver, isPaused, gameEngine, makeMove, nextTurn])
+  }, [gameState?.currentPlayer, gameState?.isAIPlayer, gameState?.gameOver, isPaused, fastMode, gameEngine, makeMove, nextTurn])
 
   // 获取点击的格子坐标
   const getTileFromEvent = (e) => {
     const canvas = canvasRef.current
-    if (!canvas || !gameState?.map) return null
+    if (!canvas || !gameState?.map || !rendererRef.current) return null
 
     const rect = canvas.getBoundingClientRect()
-    const canvasWidth = rect.width
-    const canvasHeight = rect.height
-    
     const x = e.clientX - rect.left
     const y = e.clientY - rect.top
 
-    const tileSize = Math.min(
-      canvasWidth / gameState.map.width,
-      canvasHeight / gameState.map.height
-    )
-    const offsetX = (canvasWidth - gameState.map.width * tileSize) / 2
-    const offsetY = (canvasHeight - gameState.map.height * tileSize) / 2
-
-    const tileX = Math.floor((x - offsetX) / tileSize)
-    const tileY = Math.floor((y - offsetY) / tileSize)
-
-    if (tileX >= 0 && tileX < gameState.map.width && 
-        tileY >= 0 && tileY < gameState.map.height) {
-      return { x: tileX, y: tileY }
-    }
-    return null
+    return rendererRef.current.screenToTile(x, y, gameState.map)
   }
 
   // 处理鼠标按下
@@ -180,6 +173,7 @@ function GameCanvas({ isPaused = false, gameConfig = null }) {
     }
 
     const mapTile = gameState.map.tiles[tile.y][tile.x]
+    lastClickedTileRef.current = tile
 
     // 如果已经选中了格子，执行移动（50%）
     if (selectedTile && 
@@ -208,22 +202,42 @@ function GameCanvas({ isPaused = false, gameConfig = null }) {
     }
   }
 
+  const handleZoom = (factor) => {
+    if (!rendererRef.current || !gameState?.map) return
+    const map = gameState.map
+    const centerTile = lastClickedTileRef.current || {
+      x: Math.floor(map.width / 2),
+      y: Math.floor(map.height / 2)
+    }
+    rendererRef.current.zoomAtTile(centerTile.x, centerTile.y, factor, map)
+  }
+
+  const handleResetView = () => {
+    if (!rendererRef.current || !gameState?.map) return
+    rendererRef.current.resetView(gameState.map)
+  }
+
+  useEffect(() => {
+    if (!onRegisterCameraControls) return
+    const controls = {
+      zoomIn: () => handleZoom(1.25),
+      zoomOut: () => handleZoom(0.8),
+      resetView: () => handleResetView()
+    }
+    onRegisterCameraControls(controls)
+    return () => onRegisterCameraControls(null)
+  }, [onRegisterCameraControls, gameState])
+
   return (
-    <canvas
-      ref={canvasRef}
-      className="w-full h-full cursor-pointer"
-      style={{ 
-        display: 'block',
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%'
-      }}
-      onMouseDown={handleMouseDown}
-      onMouseUp={handleMouseUp}
-      onClick={handleClick}
-    />
+    <div className="relative w-full h-full">
+      <canvas
+        ref={canvasRef}
+        className="w-full h-full cursor-pointer block"
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
+        onClick={handleClick}
+      />
+    </div>
   )
 }
 

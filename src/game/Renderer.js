@@ -2,6 +2,7 @@
 import strongholdTexture from '../assets/tiles/stronghold.png'
 import capitalTexture from '../assets/tiles/capital.png'
 import obstacleTexture from '../assets/tiles/obstacle.png'
+import { getPlayerColor } from '../utils/colors'
 
 const TILE_TEXTURE_FILES = {
   stronghold: strongholdTexture,
@@ -13,6 +14,7 @@ class Renderer {
   constructor(canvas) {
     this.canvas = canvas
     this.ctx = canvas.getContext('2d')
+    this.dpr = window.devicePixelRatio || 1
     this.setupCanvas()
     
     // 缓存上次渲染状态
@@ -21,9 +23,13 @@ class Renderer {
     this.dirtyTiles = new Set() // 需要重绘的格子 {x-y}
     this.canvasWidth = 0
     this.canvasHeight = 0
-    this.tileSize = 0
+    this.baseTileSize = 0 // 基础格子大小（未缩放）
+    this.tileSize = 0     // 实际绘制用的格子大小（包含缩放）
     this.offsetX = 0
     this.offsetY = 0
+    this.zoom = 1
+    this.minZoom = 0.5
+    this.maxZoom = 2.5
     this.textures = {}
     this.loadTextures()
     
@@ -44,14 +50,15 @@ class Renderer {
   setupCanvas() {
     const resize = () => {
       const rect = this.canvas.getBoundingClientRect()
-      
-      // 设置Canvas尺寸为CSS尺寸（1:1对应）
-      this.canvas.width = rect.width
-      this.canvas.height = rect.height
-      
-      // 缓存尺寸
+      const dpr = window.devicePixelRatio || 1
+      this.dpr = dpr
       this.canvasWidth = rect.width
       this.canvasHeight = rect.height
+      this.canvas.style.width = `${rect.width}px`
+      this.canvas.style.height = `${rect.height}px`
+      this.canvas.width = rect.width * dpr
+      this.canvas.height = rect.height * dpr
+      this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       
       // 如果地图已加载，重新计算布局并标记所有格子为脏
       if (this.lastGameState?.map) {
@@ -64,15 +71,19 @@ class Renderer {
   }
 
   /**
-   * 计算布局参数（缓存，避免每帧计算）
+   * 计算布局参数（基础格子大小），缩放和平移由 zoom/offset 控制
    */
   calculateLayout(map) {
-    this.tileSize = Math.min(
+    this.baseTileSize = Math.min(
       this.canvasWidth / map.width,
       this.canvasHeight / map.height
     )
-    this.offsetX = (this.canvasWidth - map.width * this.tileSize) / 2
-    this.offsetY = (this.canvasHeight - map.height * this.tileSize) / 2
+    // 初始化 tileSize 和 offset，只在初次或重置视图时使用
+    if (!this.tileSize) {
+      this.tileSize = this.baseTileSize * this.zoom
+      this.offsetX = (this.canvasWidth - map.width * this.tileSize) / 2
+      this.offsetY = (this.canvasHeight - map.height * this.tileSize) / 2
+    }
   }
 
   /**
@@ -96,6 +107,57 @@ class Renderer {
    */
   markTileDirty(x, y) {
     this.dirtyTiles.add(`${x}-${y}`)
+  }
+
+  /**
+   * 将屏幕坐标转换为格子坐标
+   */
+  screenToTile(screenX, screenY, map) {
+    const targetMap = map || this.lastGameState?.map
+    if (!targetMap || !this.tileSize) return null
+    const tileX = Math.floor((screenX - this.offsetX) / this.tileSize)
+    const tileY = Math.floor((screenY - this.offsetY) / this.tileSize)
+    if (tileX < 0 || tileX >= targetMap.width || tileY < 0 || tileY >= targetMap.height) {
+      return null
+    }
+    return { x: tileX, y: tileY }
+  }
+
+  /**
+   * 以某个格子为中心缩放
+   */
+  zoomAtTile(tileX, tileY, factor, map) {
+    const targetMap = map || this.lastGameState?.map
+    if (!targetMap || !this.baseTileSize) return
+
+    const oldZoom = this.zoom
+    let newZoom = oldZoom * factor
+    newZoom = Math.max(this.minZoom, Math.min(this.maxZoom, newZoom))
+    if (Math.abs(newZoom - oldZoom) < 0.001) return
+
+    const oldTileSize = this.tileSize || this.baseTileSize * oldZoom
+    const centerWorldX = this.offsetX + (tileX + 0.5) * oldTileSize
+    const centerWorldY = this.offsetY + (tileY + 0.5) * oldTileSize
+
+    this.zoom = newZoom
+    this.tileSize = this.baseTileSize * this.zoom
+
+    this.offsetX = centerWorldX - (tileX + 0.5) * this.tileSize
+    this.offsetY = centerWorldY - (tileY + 0.5) * this.tileSize
+
+    this.markAllDirty(targetMap)
+  }
+
+  /**
+   * 重置视图
+   */
+  resetView(map) {
+    const targetMap = map || this.lastGameState?.map
+    if (!targetMap) return
+    this.zoom = 1
+    this.tileSize = 0 // 让 calculateLayout 重新初始化
+    this.calculateLayout(targetMap)
+    this.markAllDirty(targetMap)
   }
 
   /**
@@ -180,14 +242,17 @@ class Renderer {
     // 如果尺寸变化，重新计算布局
     const rect = this.canvas.getBoundingClientRect()
     if (this.canvasWidth !== rect.width || this.canvasHeight !== rect.height) {
+      const dpr = window.devicePixelRatio || 1
+      this.dpr = dpr
       this.canvasWidth = rect.width
       this.canvasHeight = rect.height
-      this.canvas.width = rect.width
-      this.canvas.height = rect.height
+      this.canvas.style.width = `${rect.width}px`
+      this.canvas.style.height = `${rect.height}px`
+      this.canvas.width = rect.width * dpr
+      this.canvas.height = rect.height * dpr
+      this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       this.calculateLayout(map)
       this.markAllDirty(map)
-    } else {
-      this.calculateLayout(map)
     }
 
     // 如果没有脏格子，跳过渲染
@@ -217,7 +282,13 @@ class Renderer {
     const texts = [] // [{x, y, text, fontSize}]
     const icons = [] // [{x, y, type}] type: 'stronghold' | 'capital'
 
-    // 先清空脏区域（用背景色填充）
+    // 如果当前是整图重绘（所有格子都在脏区域），先清空整个画布，避免缩放/平移后残留
+    const isFullRedraw = this.dirtyTiles.size === map.width * map.height
+    if (isFullRedraw) {
+      ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight)
+    }
+
+    // 用背景色填充脏区域
     ctx.fillStyle = '#1f2937'
     for (const tileKey of this.dirtyTiles) {
       const [x, y] = tileKey.split('-').map(Number)
@@ -237,20 +308,18 @@ class Renderer {
       const py = this.offsetY + y * this.tileSize
       const isSelected = selectedTile && selectedTile.x === x && selectedTile.y === y
 
-      // 确定颜色
-      let color = '#374151'
-      if (tile.type === 1) {
-        color = '#4b5563'
-      } else if (tile.owner === 0) {
-        color = '#6b7280'
-      } else if (tile.owner === currentPlayer) {
-        color = '#3b82f6'
-      } else {
-        color = '#ef4444'
+      // 确定背景颜色：中立 / 山区 / 每个玩家固定颜色
+      let bgColor = '#374151'
+      if (tile.type === 1) { // 山区
+        bgColor = '#4b5563'
+      } else if (tile.owner === 0) { // 中立
+        bgColor = '#6b7280'
+      } else { // 玩家格子：按玩家ID给固定颜色
+        bgColor = getPlayerColor(tile.owner)
       }
 
       // 收集背景
-      backgrounds.push({ x: px, y: py, color })
+      backgrounds.push({ x: px, y: py, color: bgColor })
 
       // 收集贴图
       let textureType = null
@@ -265,19 +334,34 @@ class Renderer {
         texturedTiles.push({ x: px, y: py, type: textureType })
       }
 
-      // 收集边框
+      // 收集边框：当前玩家格子强烈高亮
+      if (tile.owner === currentPlayer) {
+        borders.push({ x: px, y: py, color: '#facc15', width: 4 }) // 明亮黄色粗边
+      }
       if (isSelected) {
         borders.push({ x: px, y: py, color: '#fbbf24', width: 3 })
       }
       borders.push({ x: px, y: py, color: '#1f2937', width: 1 })
 
-      // 收集文字
+      // 收集文字：单位数 + 要塞占领人口成本
       if (tile.owner !== 0 && tile.type !== 1 && tile.units > 0) {
         texts.push({
           x: px + this.tileSize / 2,
           y: py + this.tileSize / 2,
           text: tile.units.toString(),
-          fontSize: Math.max(12, this.tileSize * 0.28)
+          fontSize: Math.max(12, this.tileSize * 0.35),
+          color: '#ffffff'
+        })
+      }
+
+      // 要塞占领人口成本文字（仅在未被占领时显示）
+      if (tile.type === 2 && tile.owner === 0 && typeof tile.captureCost === 'number' && tile.captureCost > 0) {
+        texts.push({
+          x: px + this.tileSize / 2,
+          y: py + this.tileSize /2,
+          text: tile.captureCost.toString(),
+          fontSize: Math.max(10, this.tileSize * 0.3),
+          color: '#facc15'
         })
       }
 
@@ -329,7 +413,7 @@ class Renderer {
         ctx.strokeText(text.text, text.x, text.y)
         
         // 填充
-        ctx.fillStyle = '#ffffff'
+        ctx.fillStyle = text.color || '#ffffff'
         ctx.fillText(text.text, text.x, text.y)
       }
     }
@@ -375,31 +459,35 @@ class Renderer {
   }
 
   drawTile(ctx, x, y, size, tile, currentPlayer, isSelected = false) {
-    // 格子颜色
-    let color = '#374151' // 默认灰色
-
+    // 背景颜色：与 renderBatch 保持一致
+    let bgColor = '#374151'
     if (tile.type === 1) { // 山区
-      color = '#4b5563'
+      bgColor = '#4b5563'
     } else if (tile.owner === 0) { // 中立
-      color = '#6b7280'
-    } else if (tile.owner === currentPlayer) { // 己方
-      color = '#3b82f6'
-    } else { // 敌方
-      color = '#ef4444'
+      bgColor = '#6b7280'
+    } else {
+      bgColor = getPlayerColor(tile.owner)
     }
 
     // 绘制格子
-    ctx.fillStyle = color
+    ctx.fillStyle = bgColor
     ctx.fillRect(x, y, size, size)
 
-    // 如果被选中，绘制高亮边框
+    // 当前玩家格子的强高亮外圈
+    if (tile.owner === currentPlayer) {
+      ctx.strokeStyle = '#facc15'
+      ctx.lineWidth = 4
+      ctx.strokeRect(x, y, size, size)
+    }
+
+    // 如果被选中，绘制更亮的高亮边框
     if (isSelected) {
       ctx.strokeStyle = '#fbbf24'
       ctx.lineWidth = 3
       ctx.strokeRect(x + 1, y + 1, size - 2, size - 2)
     }
 
-    // 绘制边框
+    // 底层深色边框
     ctx.strokeStyle = '#1f2937'
     ctx.lineWidth = 1
     ctx.strokeRect(x, y, size, size)

@@ -45,13 +45,15 @@ class MapGenerator {
     // 2. 确保空地连通（简化版：移除部分山区）
     this.ensureConnectivity(map)
 
-    // 3. 在山区中随机选择部分变为要塞（约30%的山区）
+    // 3. 在山区中随机选择部分变为要塞（约30%的山区），并设定占领人口成本
     const strongholdCount = Math.floor(mountainCount * 0.3)
     let placed = 0
     for (let y = 0; y < height && placed < strongholdCount; y++) {
       for (let x = 0; x < width && placed < strongholdCount; x++) {
         if (map.tiles[y][x].type === this.TILE_TYPES.MOUNTAIN && Math.random() < 0.3) {
           map.tiles[y][x].type = this.TILE_TYPES.STRONGHOLD
+          // 占领该要塞需要额外消耗的兵力（20~30）
+          map.tiles[y][x].captureCost = 20 + Math.floor(Math.random() * 11)
           placed++
         }
       }

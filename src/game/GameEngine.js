@@ -72,7 +72,8 @@ class GameEngine {
       winner: this.winner,
       gameOver: this.gameOver,
       isAIPlayer: this.isAIPlayer(this.currentPlayer),
-      playerTiles: this.playerTiles // 提供给AI使用
+      playerTiles: this.playerTiles, // 提供给AI使用
+      playerCount: this.playerCount
     }
   }
 
@@ -153,17 +154,46 @@ class GameEngine {
     // 处理目标格子
     const oldToOwner = toTile.owner
     if (toTile.owner === 0) {
-      // 空地：占领不需要花费，只需要至少派1个单位过去
-      // 所有移动的单位都留在目标格子
-      if (moveUnits < 1) {
-        // 回滚源格子的变化
-        fromTile.units += moveUnits
-        return false
+      // 中立格子
+      if (toTile.type === 2 && typeof toTile.captureCost === 'number') {
+        // 中立要塞（营地）：先用一部分人口解锁，解锁消耗的人口全部牺牲，剩余人口作为占领单位
+        const oldCost = toTile.captureCost
+        const usedForUnlock = Math.min(moveUnits, oldCost)
+        const remainingAfterUnlock = moveUnits - usedForUnlock
+        toTile.captureCost = oldCost - usedForUnlock
+
+        console.log(
+          `[解锁要塞] 投入 ${moveUnits} 人口，其中 ${usedForUnlock} 用于解锁，` +
+          `解锁进度: ${oldCost} -> ${toTile.captureCost}，剩余可驻扎人口: ${remainingAfterUnlock}`
+        )
+
+        if (toTile.captureCost <= 0) {
+          // 本次完成解锁：要塞归当前玩家，剩余人口驻扎在要塞上
+          toTile.owner = this.currentPlayer
+          toTile.units = remainingAfterUnlock
+          this.updateTileOwnership(toX, toY, 0, this.currentPlayer)
+          console.log(
+            `[解锁要塞完成] 要塞已归玩家 ${this.currentPlayer}，` +
+            `解锁消耗 ${oldCost}，剩余 ${remainingAfterUnlock} 个单位驻扎`
+          )
+        } else {
+          // 未解锁完：本次投入的全部人口视为牺牲，不留下单位
+          console.log(
+            `[解锁要塞未完成] 仍需 ${toTile.captureCost} 人口解锁，本次所有 ${moveUnits} 人口已牺牲`
+          )
+        }
+      } else {
+        // 普通空地：占领不需要额外花费，所有移动的单位都留在目标格子
+        if (moveUnits < 1) {
+          // 回滚源格子的变化
+          fromTile.units += moveUnits
+          return false
+        }
+        toTile.owner = this.currentPlayer
+        toTile.units = moveUnits
+        // 更新索引：从空地(0)变为己方
+        this.updateTileOwnership(toX, toY, 0, this.currentPlayer)
       }
-      toTile.owner = this.currentPlayer
-      toTile.units = moveUnits // 所有移动的单位都留在目标格子
-      // 更新索引：从空地(0)变为己方
-      this.updateTileOwnership(toX, toY, 0, this.currentPlayer)
     } else if (toTile.owner === this.currentPlayer) {
       // 己方格子：直接合并，所有移动的单位都加到目标格子
       // 例如：移动7个单位到己方格子，目标格子+7
@@ -171,31 +201,45 @@ class GameEngine {
       // 所有权没变，不需要更新索引
     } else {
       // 敌方格子：战斗
-      // 例如：移动7个单位攻击敌方5个单位，剩余2个占领
       const result = moveUnits - toTile.units
       const wasCapital = toTile.type === 3 // 是否是首都
       const capitalOwner = wasCapital ? oldToOwner : null
       
-      console.log(`[战斗] 攻击方: ${moveUnits}, 防守方: ${toTile.units}, result: ${result}, toTile.type: ${toTile.type}, 是首都: ${wasCapital}, 目标坐标: (${toX}, ${toY})`)
+      console.log(
+        `[战斗] 攻击方: ${moveUnits}, 防守方: ${toTile.units}, result: ${result}, ` +
+        `toTile.type: ${toTile.type}, 是首都: ${wasCapital}, 目标坐标: (${toX}, ${toY})`
+      )
       
-      if (result >= 1) {
-        // 占领成功：剩余单位留在目标格子
-        toTile.owner = this.currentPlayer
-        toTile.units = result
-        
-        // 如果占领的是首都，需要特殊处理
-        if (wasCapital && capitalOwner) {
-          console.log('[占领首都] 首都被占领，变成要塞，触发接管')
-          toTile.type = 2 // 首都变成要塞
-          this.takeoverPlayerTiles(capitalOwner, this.currentPlayer)
+      if (wasCapital) {
+        // 攻击首都：仍然遵循 result>=1 占领规则
+        if (result >= 1) {
+          // 占领成功
+          toTile.owner = this.currentPlayer
+          toTile.units = result
+          
+          if (capitalOwner) {
+            // 处理首都被占领：接管对方并迁都
+            this.onCapitalCaptured(capitalOwner, toX, toY)
+          }
+          
+          this.updateTileOwnership(toX, toY, oldToOwner, this.currentPlayer)
+        } else {
+          // 攻击失败：防守方剩余单位（可能为0），但所有权不变
+          const oldUnits = toTile.units
+          toTile.units = Math.max(0, oldUnits - moveUnits)
+          console.log(`[攻击首都失败] 目标仍归玩家${oldToOwner}，单位: ${oldUnits} -> ${toTile.units}`)
         }
-        
-        this.updateTileOwnership(toX, toY, oldToOwner, this.currentPlayer)
       } else {
-        // 攻击失败：防守方剩余单位（可能为0），但所有权不变
-        const oldUnits = toTile.units
-        toTile.units = Math.max(0, oldUnits - moveUnits)
-        console.log(`[攻击失败] 目标仍归玩家${oldToOwner}，单位: ${oldUnits} -> ${toTile.units}`)
+        // 普通格子/已被占领的要塞：result>=1 占领，否则失败
+        if (result >= 1) {
+          toTile.owner = this.currentPlayer
+          toTile.units = result
+          this.updateTileOwnership(toX, toY, oldToOwner, this.currentPlayer)
+        } else {
+          const oldUnits = toTile.units
+          toTile.units = Math.max(0, oldUnits - moveUnits)
+          console.log(`[攻击失败] 目标仍归玩家${oldToOwner}，单位: ${oldUnits} -> ${toTile.units}`)
+        }
       }
     }
     
@@ -273,6 +317,44 @@ class GameEngine {
         this.updateTileOwnership(x, y, defeatedPlayerId, conquerorId)
       }
     }
+  }
+
+  /**
+   * 处理首都被占领：接管对方并将当前玩家的首都迁移到新位置
+   * @param {number} defeatedPlayerId - 被击败玩家ID（原首都所属）
+   * @param {number} newCapitalX - 新首都X坐标（被占领的首都位置）
+   * @param {number} newCapitalY - 新首都Y坐标
+   */
+  onCapitalCaptured(defeatedPlayerId, newCapitalX, newCapitalY) {
+    const map = this.map
+
+    // 1. 接管被击败玩家的所有格子
+    this.takeoverPlayerTiles(defeatedPlayerId, this.currentPlayer)
+
+    // 2. 将当前玩家原来的首都变为要塞（营地），并更新 capitals 中的坐标
+    let myCapitalRecord = null
+
+    for (const capital of map.capitals) {
+      if (capital.playerId === this.currentPlayer) {
+        myCapitalRecord = capital
+        break
+      }
+    }
+
+    if (myCapitalRecord) {
+      const oldCapTile = map.tiles[myCapitalRecord.y][myCapitalRecord.x]
+      // 原首都变为要塞（营地）
+      oldCapTile.type = 2
+
+      // 3. 更新当前玩家首都记录到新位置
+      myCapitalRecord.x = newCapitalX
+      myCapitalRecord.y = newCapitalY
+    }
+
+    // 4. 确保新位置是当前玩家的首都
+    const newCapTile = map.tiles[newCapitalY][newCapitalX]
+    newCapTile.type = 3
+    newCapTile.owner = this.currentPlayer
   }
 
   /**

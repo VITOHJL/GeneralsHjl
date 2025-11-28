@@ -9,6 +9,8 @@ import { useGameStore } from './store/gameStore'
 function App() {
   const [gameState, setGameState] = useState('menu') // menu, playing, paused, ended, menuModal
   const [gameConfig, setGameConfig] = useState(null)
+  const [fastMode, setFastMode] = useState(false)
+  const [cameraControls, setCameraControls] = useState(null)
 
   const handleExitGame = () => {
     // 退出游戏，清除游戏状态并返回主菜单
@@ -26,12 +28,22 @@ function App() {
         }} />
       )}
       {(gameState === 'playing' || gameState === 'paused' || gameState === 'menuModal') && (
-        <div className="relative w-full h-full">
-          <GameCanvas isPaused={gameState === 'paused' || gameState === 'menuModal'} gameConfig={gameConfig} />
+        <div className="relative w-full h-full flex">
+          <div className="relative flex-1 min-w-0">
+            <GameCanvas
+              isPaused={gameState === 'paused' || gameState === 'menuModal'}
+              gameConfig={gameConfig}
+              fastMode={fastMode}
+              onRegisterCameraControls={setCameraControls}
+            />
+          </div>
           <GameUI 
             onPause={() => setGameState(gameState === 'playing' ? 'paused' : 'playing')}
             onMenu={() => setGameState(gameState === 'menuModal' ? 'playing' : 'menuModal')}
             isPaused={gameState === 'paused'}
+            fastMode={fastMode}
+            onToggleFastMode={() => setFastMode((v) => !v)}
+            cameraControls={cameraControls}
           />
           {gameState === 'paused' && (
             <PauseMenu 

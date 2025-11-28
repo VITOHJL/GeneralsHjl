@@ -1,16 +1,16 @@
 import { create } from 'zustand'
 import MapGenerator from '../game/MapGenerator'
 import GameEngine from '../game/GameEngine'
-import { createAI, AI_TYPES } from '../game/ai/index'
+import { createAI } from '../game/ai/index'
 
 export const useGameStore = create((set, get) => ({
   gameState: null,
   gameEngine: null,
-  playerConfig: null, // 玩家配置：{ 1: { type: 'human' }, 2: { type: 'ai', aiType: 'random', difficulty: 'easy' } }
+  playerConfig: null, // 玩家配置：{ 1: { type: 'human' }, 2: { type: 'ai', aiType: 'random' } }
 
   initGame: (config) => {
     const { width, height, players, playerConfig } = config
-    // playerConfig: { 1: { type: 'human' }, 2: { type: 'ai', aiType: 'random', difficulty: 'easy' } }
+    // playerConfig: { 1: { type: 'human' }, 2: { type: 'ai', aiType: 'random' } }
     
     // 生成地图
     const map = MapGenerator.generateRandomMap(width, height, players)
@@ -20,7 +20,7 @@ export const useGameStore = create((set, get) => ({
     for (let playerId = 1; playerId <= players; playerId++) {
       const config = playerConfig[playerId]
       if (config && config.type === 'ai' && config.aiType) {
-        ais[playerId] = createAI(config.aiType, playerId, config.difficulty || 'easy')
+        ais[playerId] = createAI(config.aiType, playerId)
       }
     }
     
@@ -35,7 +35,7 @@ export const useGameStore = create((set, get) => ({
   },
 
   // 切换玩家类型（人/AI）
-  setPlayerType: (playerId, type, aiType = null, difficulty = 'easy') => {
+  setPlayerType: (playerId, type, aiType = null) => {
     const { gameEngine, playerConfig } = get()
     if (!gameEngine) return
 
@@ -46,9 +46,9 @@ export const useGameStore = create((set, get) => ({
       // 移除AI
       gameEngine.removeAI(playerId)
     } else if (type === 'ai' && aiType) {
-      newConfig[playerId] = { type: 'ai', aiType, difficulty }
+      newConfig[playerId] = { type: 'ai', aiType }
       // 添加或更新AI
-      const ai = createAI(aiType, playerId, difficulty)
+      const ai = createAI(aiType, playerId)
       gameEngine.setAI(playerId, ai)
     }
 

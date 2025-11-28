@@ -5,8 +5,8 @@ import AIBase from './AIBase.js'
  * 随机选择一个己方格子，随机选择一个相邻目标，随机选择移动类型
  */
 class RandomAI extends AIBase {
-  constructor(playerId, difficulty = 'easy') {
-    super(playerId, difficulty)
+  constructor(playerId) {
+    super(playerId)
   }
 
   /**
