@@ -131,7 +131,7 @@ class AdaptiveAI extends AIBase {
       if (this.isImportantUnderThreat(context, target)) {
         baseScore += 12
       }
-
+  
       // 孤注一掷：50回合后己方落后明显则提高进攻倾向
       if (context.turn > 50 && context.ownUnits < context.enemyUnits * 0.8) {
         baseScore += 18
@@ -415,4 +415,5 @@ class AdaptiveAI extends AIBase {
 }
 
 export default AdaptiveAI
+
 
