@@ -174,6 +174,7 @@ function GameMenu({ onStartGame }) {
                         >
                           <option value={AI_TYPES.RANDOM}>{getAIName(AI_TYPES.RANDOM)}</option>
                           <option value={AI_TYPES.ADAPTIVE}>{getAIName(AI_TYPES.ADAPTIVE)}</option>
+                          <option value={AI_TYPES.MINIMAX}>{getAIName(AI_TYPES.MINIMAX)}</option>
                         </select>
                       </div>
                     )}

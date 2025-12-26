@@ -1,0 +1,137 @@
+{
+  "bestParams": {
+    "baseWeight": 0.3553951186106663,
+    "territoryWeight": 20.1447484497231,
+    "armyWeight": 5.481180160955832,
+    "importantWeight": 61.967685747568666,
+    "attackWeight": 0.13747653589844722,
+    "attackBaseMultiplier": 5.2453793756265075,
+    "attackCapitalBonus": 161.26460958851402,
+    "attackFastBonus": 106.37633413122671,
+    "attackLargeArmyBonus": 85.68357751100338,
+    "defenseWeight": 0.039000095242045306,
+    "defenseCapitalBonus": 213.9015754503966,
+    "defenseStrongholdBonus": 115.91788923637495,
+    "defenseSupportBonus": 259.0702042047737,
+    "growthWeight": 0.014830886363517785,
+    "growthStrongholdBonus": 307.08645068805146,
+    "growthTerritoryBonus": 13.494783628673527,
+    "largeArmyThresholdMultiplier": 1.5027965674682888,
+    "largeArmyMinUnits": 36.54708804585486,
+    "largeArmyBonus": 1.9948214498885841,
+    "maxDepth": 1,
+    "maxBranches": 8
+  },
+  "bestFitness": 0.1,
+  "history": [
+    {
+      "fitness": 0.1,
+      "wins": 1,
+      "total": 10
+    },
+    {
+      "fitness": 0.1,
+      "wins": 1,
+      "total": 10
+    },
+    {
+      "fitness": 0.1,
+      "wins": 1,
+      "total": 10
+    },
+    {
+      "fitness": 0.1,
+      "wins": 1,
+      "total": 10
+    },
+    {
+      "fitness": 0,
+      "wins": 0,
+      "total": 10
+    },
+    {
+      "fitness": 0,
+      "wins": 0,
+      "total": 10
+    },
+    {
+      "fitness": 0,
+      "wins": 0,
+      "total": 10
+    },
+    {
+      "fitness": 0,
+      "wins": 0,
+      "total": 10
+    },
+    {
+      "fitness": 0,
+      "wins": 0,
+      "total": 10
+    },
+    {
+      "fitness": 0,
+      "wins": 0,
+      "total": 10
+    },
+    {
+      "fitness": 0,
+      "wins": 0,
+      "total": 10
+    },
+    {
+      "fitness": 0,
+      "wins": 0,
+      "total": 10
+    },
+    {
+      "fitness": 0,
+      "wins": 0,
+      "total": 10
+    },
+    {
+      "fitness": 0,
+      "wins": 0,
+      "total": 10
+    },
+    {
+      "fitness": 0,
+      "wins": 0,
+      "total": 10
+    },
+    {
+      "fitness": 0,
+      "wins": 0,
+      "total": 10
+    },
+    {
+      "fitness": 0,
+      "wins": 0,
+      "total": 10
+    },
+    {
+      "fitness": 0,
+      "wins": 0,
+      "total": 10
+    },
+    {
+      "fitness": 0,
+      "wins": 0,
+      "total": 10
+    },
+    {
+      "fitness": 0,
+      "wins": 0,
+      "total": 10
+    }
+  ],
+  "config": {
+    "populationSize": 20,
+    "generations": 10,
+    "gamesPerEvaluation": 10,
+    "mutationRate": 0.1,
+    "crossoverRate": 0.7,
+    "eliteCount": 2,
+    "opponentAI": "adaptive"
+  }
+}

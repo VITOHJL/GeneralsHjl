@@ -95,11 +95,11 @@ npm run train:evaluate -- `
 # 对比两个AI（完整参数示例）
 npm run train:compare -- `
   --ai1 adaptive `
-  --ai2 random `
-  --games 50 `
+  --ai2 minimax `
+  --games 25 `
   --width 25 `
   --height 25 `
-  --maxTurns 500 `
+  --maxTurns 5000 `
   --maxTime 30000
 
 # 基准测试所有AI（完整参数示例）

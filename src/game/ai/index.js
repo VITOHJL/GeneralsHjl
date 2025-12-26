@@ -4,15 +4,18 @@
  */
 import RandomAI from './RandomAI.js'
 import AdaptiveAI from './AdaptiveAI.js'
+import MinimaxAI from './MinimaxAI.js'
 
 export const AI_TYPES = {
   RANDOM: 'random',
-  ADAPTIVE: 'adaptive'
+  ADAPTIVE: 'adaptive',
+  MINIMAX: 'minimax'
 }
 
 export const AI_CLASSES = {
   [AI_TYPES.RANDOM]: RandomAI,
-  [AI_TYPES.ADAPTIVE]: AdaptiveAI
+  [AI_TYPES.ADAPTIVE]: AdaptiveAI,
+  [AI_TYPES.MINIMAX]: MinimaxAI
 }
 
 /**
@@ -21,7 +24,8 @@ export const AI_CLASSES = {
 export function getAIName(aiType) {
   const names = {
     [AI_TYPES.RANDOM]: '随机AI',
-    [AI_TYPES.ADAPTIVE]: '自适应AI'
+    [AI_TYPES.ADAPTIVE]: '自适应AI',
+    [AI_TYPES.MINIMAX]: 'Minimax AI'
   }
   return names[aiType] || aiType
 }

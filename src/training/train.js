@@ -11,6 +11,7 @@
 
 import Evaluator from './Evaluator.js'
 import GameSimulator from './GameSimulator.js'
+import { EvolutionaryOptimizer } from './EvolutionaryOptimizer.js'
 
 const args = process.argv.slice(2)
 const command = args[0]
@@ -26,6 +27,9 @@ async function main() {
         break
       case 'benchmark':
         await handleBenchmark(args.slice(1))
+        break
+      case 'evolve':
+        await handleEvolve(args.slice(1))
         break
       case 'help':
       case '--help':
@@ -296,19 +300,121 @@ async function handleBenchmark(args) {
 }
 
 /**
+ * 进化算法优化
+ */
+async function handleEvolve(args) {
+  const options = parseArgs(args)
+  
+  // 必需参数检查
+  if (!options.populationSize) {
+    throw new Error('错误: 必须提供 --populationSize 参数')
+  }
+  if (!options.generations) {
+    throw new Error('错误: 必须提供 --generations 参数')
+  }
+  if (!options.gamesPerEvaluation) {
+    throw new Error('错误: 必须提供 --gamesPerEvaluation 参数')
+  }
+  if (!options.maxTurns) {
+    throw new Error('错误: 必须提供 --maxTurns 参数')
+  }
+  if (!options.maxTime) {
+    throw new Error('错误: 必须提供 --maxTime 参数（单位：毫秒）')
+  }
+  
+  const populationSize = parseInt(options.populationSize)
+  const generations = parseInt(options.generations)
+  const gamesPerEvaluation = parseInt(options.gamesPerEvaluation)
+  const maxTurns = parseInt(options.maxTurns)
+  const maxTime = parseInt(options.maxTime)
+  const mutationRate = parseFloat(options.mutationRate || '0.1')
+  const crossoverRate = parseFloat(options.crossoverRate || '0.7')
+  const eliteCount = parseInt(options.eliteCount || '2')
+  const opponentAI = options.opponentAI || 'adaptive'
+  
+  const optimizer = new EvolutionaryOptimizer({
+    populationSize,
+    generations,
+    gamesPerEvaluation,
+    mutationRate,
+    crossoverRate,
+    eliteCount,
+    maxTurns,
+    maxTime,
+    opponentAI
+  })
+  
+  const result = await optimizer.optimize()
+  
+  console.log('\n' + '='.repeat(60))
+  console.log('进化算法优化完成！')
+  console.log('='.repeat(60))
+  console.log(`最佳适应度: ${result.bestFitness.toFixed(4)}`)
+  console.log('最佳参数:')
+  console.log(JSON.stringify(optimizer.formatParams(result.bestParams), null, 2))
+  
+  // 保存结果
+  if (options.output) {
+    const fs = await import('fs/promises')
+    await fs.writeFile(
+      options.output,
+      JSON.stringify({
+        bestParams: result.bestParams,
+        bestFitness: result.bestFitness,
+        history: result.history,
+        config: {
+          populationSize,
+          generations,
+          gamesPerEvaluation,
+          mutationRate,
+          crossoverRate,
+          eliteCount,
+          opponentAI
+        }
+      }, null, 2),
+      'utf-8'
+    )
+    console.log(`\n结果已保存到: ${options.output}`)
+  }
+  
+  return result
+}
+
+/**
  * 解析命令行参数
+ * 支持两种格式：
+ * 1. 键值对格式：--key value
+ * 2. 位置参数格式（向后兼容，用于PowerShell反引号问题）：ai1 ai2 games width height maxTurns maxTime
  */
 function parseArgs(args) {
   const options = {}
+  
+  // 检测是否为位置参数格式（第一个参数不是以--开头，且参数数量>=7）
+  // 位置参数格式仅用于compare命令：ai1 ai2 games width height maxTurns maxTime
+  if (args.length >= 7 && args[0] && !args[0].startsWith('--') && !isNaN(args[2])) {
+    // 位置参数格式
+    options.ai1 = args[0]
+    options.ai2 = args[1]
+    options.games = args[2]
+    options.width = args[3]
+    options.height = args[4]
+    options.maxTurns = args[5]
+    options.maxTime = args[6]
+    return options
+  }
+  
+  // 键值对格式解析
   for (let i = 0; i < args.length; i += 2) {
     const key = args[i]?.replace(/^--?/, '')
     const value = args[i + 1]
-    if (key && value) {
+    if (key && value && !value.startsWith('--')) {
       options[key] = value
     } else if (key && (key === 'verbose' || key === 'quiet' || key === 'all')) {
       options[key] = true
+      i-- // 回退，因为这是标志参数，不占用下一个位置
     }
   }
+  
   return options
 }
 
@@ -403,6 +509,19 @@ AI训练和评估工具
     --players 2,3 \\
     --maxTurns 500 \\
     --maxTime 30000
+
+  # 进化算法优化Minimax参数
+  node src/training/train.js evolve \\
+    --populationSize 20 \\
+    --generations 10 \\
+    --gamesPerEvaluation 10 \\
+    --mutationRate 0.1 \\
+    --crossoverRate 0.7 \\
+    --eliteCount 2 \\
+    --opponentAI adaptive \\
+    --maxTurns 500 \\
+    --maxTime 30000 \\
+    --output evolved_params.json
 `)
 }
 

@@ -39,8 +39,13 @@ export class GameSimulator {
     const ais = {}
     for (let playerId = 1; playerId <= players; playerId++) {
       const config = aiConfigs[playerId]
-      if (config && config.type === 'ai' && config.aiType) {
-        ais[playerId] = createAI(config.aiType, playerId)
+      if (config && config.type === 'ai') {
+        // 支持直接传入AI实例（用于进化算法）
+        if (config.aiInstance) {
+          ais[playerId] = config.aiInstance
+        } else if (config.aiType) {
+          ais[playerId] = createAI(config.aiType, playerId)
+        }
       }
     }
     
