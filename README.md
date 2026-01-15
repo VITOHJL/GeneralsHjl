@@ -456,9 +456,9 @@ node src/training/train_rl.js `
 
 #### 性能表现
 
-- **1v1对Random**：胜率 > 90%
-- **1v1对Adaptive**：胜率约 60%
-- **1v3对Adaptive**：胜率约 50%
+- **1v1对Random**：胜率 约 100%
+- **1v1对Adaptive**：胜率约 99%
+- **1v3对Adaptive**：胜率约 75%
 
 ### QLearningAI（基础Q-Learning AI）
 
