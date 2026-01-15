@@ -2,7 +2,7 @@
 
 一个基于 generals.io 游戏规则的本地单机策略游戏。玩家可以在本地与AI机器人对战，体验经典的领土扩张和策略对战玩法。
 
-##可在http:generals.zech.xin进行在线试玩，我们已上传所有agent
+## 可在http:generals.zech.xin进行在线试玩，我们已上传所有agent
 
 ## 项目状态
 
