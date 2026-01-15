@@ -315,6 +315,9 @@ export class Evaluator {
     const targetPlayerId = 1 // 假设目标AI总是玩家1
     
     const wins = results.filter(r => r.stats.winner === targetPlayerId).length
+    const losses = results.filter(r => r.stats.winner !== null && r.stats.winner !== targetPlayerId && !r.stats.timeout).length
+    const draws = results.filter(r => r.stats.winner === null && !r.stats.timeout).length
+    const timeouts = results.filter(r => r.stats.timeout).length
     const total = results.length
     const winRate = wins / total
     
@@ -347,6 +350,9 @@ export class Evaluator {
     return {
       totalGames: total,
       wins,
+      losses,
+      draws,
+      timeouts,
       winRate,
       avgTurns,
       avgDuration,
@@ -360,6 +366,7 @@ export class Evaluator {
       stability: stdDev / (avgScore + 1), // 变异系数
       results: results.map(r => ({
         winner: r.stats.winner,
+        timeout: r.stats.timeout,
         turns: r.stats.turns,
         score: r.stats.finalMetrics[targetPlayerId]?.score || 0
       }))

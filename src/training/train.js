@@ -118,17 +118,14 @@ async function handleEvaluate(args) {
 }
 
 /**
- * 对比两个AI
+ * 对比多个AI（支持任意数量的玩家）
  */
 async function handleCompare(args) {
   const options = parseArgs(args)
   
   // 必需参数检查
   if (!options.ai1) {
-    throw new Error('错误: 必须提供 --ai1 参数')
-  }
-  if (!options.ai2) {
-    throw new Error('错误: 必须提供 --ai2 参数')
+    throw new Error('错误: 必须提供 --ai1 参数（至少需要2个玩家）')
   }
   if (!options.games) {
     throw new Error('错误: 必须提供 --games 参数')
@@ -146,15 +143,61 @@ async function handleCompare(args) {
     throw new Error('错误: 必须提供 --maxTime 参数（单位：毫秒）')
   }
   
-  const ai1 = options.ai1
-  const ai2 = options.ai2
+  // 收集所有 --aiN 参数（N = 1, 2, 3, 4, ...）
+  const aiTypes = []
+  const aiDisplayNames = []
+  const aiParams = []
+  let playerCount = 0
+  
+  for (let i = 1; i <= 10; i++) { // 最多支持10个玩家
+    const aiKey = `ai${i}`
+    if (options[aiKey]) {
+      aiTypes[i - 1] = options[aiKey]
+      aiDisplayNames[i - 1] = options[aiKey]
+      aiParams[i - 1] = null
+      playerCount = i
+    }
+  }
+  
+  if (playerCount < 2) {
+    throw new Error('错误: 至少需要提供 --ai1 和 --ai2 参数')
+  }
+  
   const games = parseInt(options.games)
   const width = parseInt(options.width)
   const height = parseInt(options.height)
   const maxTurns = parseInt(options.maxTurns)
   const maxTime = parseInt(options.maxTime)
 
-  console.log(`\n对比测试: ${ai1} vs ${ai2}`)
+  // 加载优化后的参数（如果指定了参数文件）
+  if (options.paramsFile) {
+    const fs = await import('fs/promises')
+    try {
+      const paramsData = JSON.parse(await fs.readFile(options.paramsFile, 'utf-8'))
+      const evolvedParams = paramsData.bestParams
+      
+      for (let i = 0; i < playerCount; i++) {
+        if (aiTypes[i] === 'minimax') {
+          aiParams[i] = evolvedParams
+          aiDisplayNames[i] = 'minimax (evolved)'
+        }
+      }
+      
+      console.log(`\n已加载优化参数文件: ${options.paramsFile}`)
+      for (let i = 0; i < playerCount; i++) {
+        if (aiParams[i]) {
+          console.log(`  AI${i + 1} (${aiDisplayNames[i]}) 使用优化参数`)
+        }
+      }
+    } catch (error) {
+      throw new Error(`无法加载参数文件 ${options.paramsFile}: ${error.message}`)
+    }
+  }
+
+  // 显示对战信息
+  const aiNamesStr = aiDisplayNames.map((name, idx) => `AI${idx + 1}(${name})`).join(' vs ')
+  console.log(`\n对比测试: ${aiNamesStr}`)
+  console.log(`玩家数量: ${playerCount}`)
   console.log(`游戏场数: ${games}`)
   console.log(`地图尺寸: ${width}x${height}`)
   console.log(`最大回合数: ${maxTurns}, 超时时间: ${maxTime}ms`)
@@ -165,62 +208,104 @@ async function handleCompare(args) {
     logLevel: 'silent'
   })
 
-  const results = {
-    ai1: { wins: 0, total: 0, scores: [] },
-    ai2: { wins: 0, total: 0, scores: [] },
-    draws: 0
+  // 导入 createAI 函数
+  const { createAI } = await import('../game/ai/index.js')
+
+  // 初始化统计结果（支持多个玩家）
+  const results = {}
+  for (let i = 1; i <= playerCount; i++) {
+    results[i] = { wins: 0, total: 0, scores: [] }
   }
+  results.draws = 0
+  results.timeouts = 0
 
   for (let i = 0; i < games; i++) {
     if ((i + 1) % 10 === 0) {
       process.stdout.write(`\r进度: ${i + 1}/${games}`)
     }
 
+    // 为每个玩家创建 AI 配置
+    const aiConfigs = {}
+    
+    for (let playerId = 1; playerId <= playerCount; playerId++) {
+      const aiType = aiTypes[playerId - 1]
+      const aiParam = aiParams[playerId - 1]
+      
+      // RL 专用参数：支持通过命令行指定 Q 表路径
+      const qtableKey = `qtableP${playerId}`
+      const aiOptions = {}
+      
+      if (options[qtableKey] && (aiType === 'strategy_rl' || aiType === 'qlearning_rl')) {
+        aiOptions.qTablePath = options[qtableKey]
+      }
+      
+      let aiInstance = null
+      
+      // 如果指定了 minimax 优化参数
+      if (aiParam) {
+        aiInstance = createAI(aiType, playerId, {
+          evaluationParams: aiParam,
+          maxDepth: aiParam.maxDepth,
+          maxBranches: aiParam.maxBranches,
+          ...aiOptions
+        })
+      }
+      
+      // 配置 AI
+      aiConfigs[playerId] = aiInstance
+        ? { type: 'ai', aiInstance: aiInstance }
+        : { type: 'ai', aiType: aiType, options: aiOptions }
+    }
+
     const gameConfig = {
       width,
       height,
-      players: 2,
-      aiConfigs: {
-        1: { type: 'ai', aiType: ai1 },
-        2: { type: 'ai', aiType: ai2 }
-      }
+      players: playerCount,
+      aiConfigs
     }
 
     const result = await simulator.runGame(gameConfig)
-    const winner = result.stats.winner
+    const stats = result.stats
+    const winner = stats.winner
 
-    if (winner === 1) {
-      results.ai1.wins++
-      results.ai1.scores.push(result.stats.finalMetrics[1]?.score || 0)
-    } else if (winner === 2) {
-      results.ai2.wins++
-      results.ai2.scores.push(result.stats.finalMetrics[2]?.score || 0)
+    if (stats.timeout) {
+      results.timeouts++
+    } else if (winner !== null && winner >= 1 && winner <= playerCount) {
+      results[winner].wins++
+      results[winner].scores.push(stats.finalMetrics[winner]?.score || 0)
     } else {
       results.draws++
     }
 
-    results.ai1.total++
-    results.ai2.total++
+    // 更新所有玩家的总场数
+    for (let playerId = 1; playerId <= playerCount; playerId++) {
+      results[playerId].total++
+    }
   }
 
+  // 输出统计结果
   console.log('\n' + '='.repeat(60))
   console.log('对比结果:')
   console.log('='.repeat(60))
-  console.log(`${ai1}:`)
-  console.log(`  胜场: ${results.ai1.wins}/${results.ai1.total}`)
-  console.log(`  胜率: ${(results.ai1.wins / results.ai1.total * 100).toFixed(1)}%`)
-  if (results.ai1.scores.length > 0) {
-    const avgScore = results.ai1.scores.reduce((a, b) => a + b, 0) / results.ai1.scores.length
-    console.log(`  平均分数: ${avgScore.toFixed(2)}`)
+  
+  for (let playerId = 1; playerId <= playerCount; playerId++) {
+    const displayName = aiDisplayNames[playerId - 1]
+    const playerResults = results[playerId]
+    const winRate = playerResults.total > 0 
+      ? (playerResults.wins / playerResults.total * 100).toFixed(1) 
+      : '0.0'
+    
+    console.log(`\n玩家 ${playerId} (${displayName}):`)
+    console.log(`  胜场: ${playerResults.wins}/${playerResults.total}`)
+    console.log(`  胜率: ${winRate}%`)
+    if (playerResults.scores.length > 0) {
+      const avgScore = playerResults.scores.reduce((a, b) => a + b, 0) / playerResults.scores.length
+      console.log(`  平均分数: ${avgScore.toFixed(2)}`)
+    }
   }
-  console.log(`\n${ai2}:`)
-  console.log(`  胜场: ${results.ai2.wins}/${results.ai2.total}`)
-  console.log(`  胜率: ${(results.ai2.wins / results.ai2.total * 100).toFixed(1)}%`)
-  if (results.ai2.scores.length > 0) {
-    const avgScore = results.ai2.scores.reduce((a, b) => a + b, 0) / results.ai2.scores.length
-    console.log(`  平均分数: ${avgScore.toFixed(2)}`)
-  }
+  
   console.log(`\n平局: ${results.draws}`)
+  console.log(`超时: ${results.timeouts}`)
   console.log('='.repeat(60))
 }
 
@@ -458,13 +543,20 @@ AI训练和评估工具
   --quiet                静默模式（可选）
 
 对比命令选项（所有参数都是必需的）:
-  --ai1 <type>     第一个AI类型（玩家1）
-  --ai2 <type>     第二个AI类型（玩家2）
+  --ai1 <type>     第一个AI类型（玩家1，必需）
+  --ai2 <type>     第二个AI类型（玩家2，必需）
+  --ai3 <type>     第三个AI类型（玩家3，可选）
+  --ai4 <type>     第四个AI类型（玩家4，可选）
+  ...              支持最多10个玩家（--ai1 到 --ai10）
   --games <num>    对战游戏数量
   --width <num>    地图宽度
   --height <num>   地图高度
   --maxTurns <num> 最大回合数
   --maxTime <num>  超时时间（毫秒）
+  --qtableP1 <path> Q表文件路径（可选，用于玩家1的strategy_rl或qlearning_rl）
+  --qtableP2 <path> Q表文件路径（可选，用于玩家2的strategy_rl或qlearning_rl）
+  ...              支持 --qtableP1 到 --qtableP10
+  --paramsFile <file> 优化参数JSON文件（可选，用于minimax AI）
 
 基准测试选项（所有参数都是必需的）:
   --all           测试所有AI（random,adaptive）
@@ -489,7 +581,7 @@ AI训练和评估工具
     --maxTurns 500 \\
     --maxTime 30000
 
-  # 对比命令
+  # 对比命令（1v1）
   node src/training/train.js compare \\
     --ai1 adaptive \\
     --ai2 random \\
@@ -498,6 +590,30 @@ AI训练和评估工具
     --height 25 \\
     --maxTurns 500 \\
     --maxTime 30000
+
+  # 多玩家对比（1v3）
+  node src/training/train.js compare \\
+    --ai1 strategy_rl \\
+    --ai2 adaptive \\
+    --ai3 adaptive \\
+    --ai4 adaptive \\
+    --games 200 \\
+    --width 15 \\
+    --height 15 \\
+    --maxTurns 5000 \\
+    --maxTime 30000 \\
+    --qtableP1 qtable-1.json
+
+  # 使用优化参数对比Minimax vs Adaptive
+  node src/training/train.js compare \\
+    --ai1 minimax \\
+    --ai2 adaptive \\
+    --games 50 \\
+    --width 25 \\
+    --height 25 \\
+    --maxTurns 500 \\
+    --maxTime 30000 \\
+    --paramsFile evolved_params.json
 
   # 基准测试命令
   node src/training/train.js benchmark \\

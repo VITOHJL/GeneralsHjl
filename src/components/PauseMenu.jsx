@@ -86,6 +86,8 @@ function PauseMenu({ onResume, onMenu }) {
                         <option value={AI_TYPES.RANDOM}>{getAIName(AI_TYPES.RANDOM)}</option>
                         <option value={AI_TYPES.ADAPTIVE}>{getAIName(AI_TYPES.ADAPTIVE)}</option>
                         <option value={AI_TYPES.MINIMAX}>{getAIName(AI_TYPES.MINIMAX)}</option>
+                        <option value={AI_TYPES.STRATEGY_RL}>{getAIName(AI_TYPES.STRATEGY_RL)}</option>
+                        <option value={AI_TYPES.QLEARNING_RL}>{getAIName(AI_TYPES.QLEARNING_RL)}</option>
                       </select>
                     </div>
                   )}

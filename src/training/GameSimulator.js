@@ -1,36 +1,32 @@
 /**
  * 游戏模拟器
- * 用于无头模式运行游戏，收集数据用于训练和评估
+ * 用于无头模式运行游戏，收集统计数据
  */
 import MapGenerator from '../game/MapGenerator.js'
 import GameEngine from '../game/GameEngine.js'
 import { createAI } from '../game/ai/index.js'
 
-export class GameSimulator {
+class GameSimulator {
   constructor(config = {}) {
-    // 必需参数检查
-    if (config.maxTurns === undefined) {
-      throw new Error('GameSimulator: maxTurns 参数是必需的')
-    }
-    if (config.maxTime === undefined) {
-      throw new Error('GameSimulator: maxTime 参数是必需的')
-    }
-    
     this.config = {
-      maxTurns: config.maxTurns,
-      maxTime: config.maxTime,
-      logLevel: config.logLevel || 'silent', // 'silent', 'minimal', 'verbose'
-      ...config
+      maxTurns: config.maxTurns || 500,
+      maxTime: config.maxTime || 30000, // 30秒
+      logLevel: config.logLevel || 'silent' // 'silent' | 'normal' | 'verbose'
     }
   }
 
   /**
    * 运行一场游戏
-   * @param {Object} gameConfig - 游戏配置 { width, height, players, aiConfigs }
-   * @returns {Object} 游戏结果和统计数据
+   * @param {Object} gameConfig - 游戏配置
+   * @param {number} gameConfig.width - 地图宽度
+   * @param {number} gameConfig.height - 地图高度
+   * @param {number} gameConfig.players - 玩家数量
+   * @param {Object} gameConfig.aiConfigs - AI配置 { playerId: { type: 'ai', aiType: 'random' } 或 { type: 'ai', aiInstance: ai } }
+   * @returns {Promise<Object>} 游戏结果 { stats: { winner, timeout, gameOver, turns, duration, finalMetrics } }
    */
   async runGame(gameConfig) {
     const { width, height, players, aiConfigs } = gameConfig
+    const startTime = Date.now()
     
     // 生成地图
     const map = MapGenerator.generateRandomMap(width, height, players)
@@ -40,11 +36,12 @@ export class GameSimulator {
     for (let playerId = 1; playerId <= players; playerId++) {
       const config = aiConfigs[playerId]
       if (config && config.type === 'ai') {
-        // 支持直接传入AI实例（用于进化算法）
         if (config.aiInstance) {
+          // 使用提供的AI实例
           ais[playerId] = config.aiInstance
         } else if (config.aiType) {
-          ais[playerId] = createAI(config.aiType, playerId)
+          // 创建新的AI实例
+          ais[playerId] = createAI(config.aiType, playerId, config.options || {})
         }
       }
     }
@@ -52,31 +49,22 @@ export class GameSimulator {
     // 创建游戏引擎
     const engine = new GameEngine(map, players, { ais })
     
+    // 游戏统计
     const stats = {
-      turns: 0,
-      moves: {},
-      territories: {},
-      units: {},
-      events: [],
-      startTime: Date.now(),
-      endTime: null,
       winner: null,
+      timeout: false,
       gameOver: false,
-      timeout: false
+      turns: 0,
+      duration: 0,
+      finalMetrics: {},
+      // 标记：是否是因为达到 maxTurns 后用人口规则强行判定出的胜负
+      resolvedByMaxTurns: false
     }
     
-    // 初始化统计
-    for (let i = 1; i <= players; i++) {
-      stats.moves[i] = 0
-      stats.territories[i] = 0
-      stats.units[i] = 0
-    }
+    let turn = 0
     
-    // 运行游戏循环
-    const startTime = Date.now()
-    let lastState = null
-    
-    while (!engine.gameOver && engine.turn <= this.config.maxTurns) {
+    // 游戏主循环
+    while (!engine.gameOver && turn < this.config.maxTurns) {
       // 检查超时
       if (Date.now() - startTime > this.config.maxTime) {
         stats.timeout = true
@@ -84,187 +72,132 @@ export class GameSimulator {
         break
       }
       
-      // 记录回合开始状态
-      const state = engine.getState()
-      stats.turns = state.turn
+      // 获取当前玩家
+      const currentPlayer = engine.currentPlayer
+      const gameState = engine.getState()
       
-      // 如果是AI回合，执行AI决策
-      if (state.isAIPlayer) {
-        const aiDecision = engine.getAIDecision()
-        if (aiDecision) {
-          const success = engine.makeMove(
-            aiDecision.fromX,
-            aiDecision.fromY,
-            aiDecision.toX,
-            aiDecision.toY,
-            aiDecision.moveType
+      // 如果是AI玩家，获取AI决策
+      if (engine.isAIPlayer(currentPlayer)) {
+        const decision = engine.getAIDecision()
+        if (decision) {
+          engine.makeMove(
+            decision.fromX,
+            decision.fromY,
+            decision.toX,
+            decision.toY,
+            decision.moveType || 'half'
           )
-          
-          if (success) {
-            stats.moves[state.currentPlayer]++
-          }
         }
       }
       
       // 切换到下一回合
       engine.nextTurn()
       
-      // 更新统计数据
-      this.updateStats(engine, stats)
-      
-      // 检查游戏结束
+      // 更新回合计数（每轮所有玩家都操作完才算一回合）
+      if (engine.currentPlayer === 1 && engine.turn > turn) {
+        turn = engine.turn
+      }
+
+      // 检查游戏是否结束
       if (engine.gameOver) {
         stats.winner = engine.winner
         stats.gameOver = true
         break
       }
-      
-      lastState = engine.getState()
     }
     
-    stats.endTime = Date.now()
-    stats.duration = stats.endTime - stats.startTime
+    // 记录最终统计
+    stats.turns = turn
+    stats.duration = Date.now() - startTime
     
-    // 最终统计
-    this.finalizeStats(engine, stats)
-    
-    return {
-      gameConfig,
-      stats,
-      finalState: engine.getState()
-    }
-  }
+    // 如果游戏没有正常结束（没有超时），尝试根据人口决定胜负
+    if (!stats.gameOver && !stats.timeout) {
+      const finalState = engine.getState()
+      const { map: finalMap, playerCount } = finalState
 
-  /**
-   * 更新统计数据
-   */
-  updateStats(engine, stats) {
-    const state = engine.getState()
-    const { map } = state
-    
-    // 统计每个玩家的领土和单位
-    for (let y = 0; y < map.height; y++) {
-      for (let x = 0; x < map.width; x++) {
-        const tile = map.tiles[y][x]
+      // 计算每个玩家的总人口
+      const totalUnits = {}
+      for (let id = 1; id <= playerCount; id++) {
+        totalUnits[id] = 0
+      }
+      for (let y = 0; y < finalMap.height; y++) {
+        for (let x = 0; x < finalMap.width; x++) {
+          const tile = finalMap.tiles[y][x]
         if (tile.owner > 0) {
-          stats.territories[tile.owner] = (stats.territories[tile.owner] || 0) + 1
-          stats.units[tile.owner] = (stats.units[tile.owner] || 0) + tile.units
-        }
+            totalUnits[tile.owner] = (totalUnits[tile.owner] || 0) + (tile.units || 0)
       }
     }
   }
 
-  /**
-   * 完成统计
-   */
-  finalizeStats(engine, stats) {
-    const state = engine.getState()
-    const { map } = state
-    
-    // 最终领土和单位统计
-    for (let y = 0; y < map.height; y++) {
-      for (let x = 0; x < map.width; x++) {
-        const tile = map.tiles[y][x]
-        if (tile.owner > 0) {
-          stats.territories[tile.owner] = (stats.territories[tile.owner] || 0) + 1
-          stats.units[tile.owner] = (stats.units[tile.owner] || 0) + tile.units
+      // 找到最大人口
+      let bestUnits = -1
+      for (let id = 1; id <= playerCount; id++) {
+        const u = totalUnits[id] || 0
+        if (u > bestUnits) {
+          bestUnits = u
         }
       }
-    }
-    
-    // 计算最终指标
-    stats.finalMetrics = this.calculateMetrics(engine, stats)
-  }
 
-  /**
-   * 计算评估指标
-   */
-  calculateMetrics(engine, stats) {
-    const state = engine.getState()
-    const { map, playerCount } = state
+      // 收集所有并列第一的玩家
+      const candidates = []
+      for (let id = 1; id <= playerCount; id++) {
+        const u = totalUnits[id] || 0
+        if (u === bestUnits) {
+          candidates.push(id)
+        }
+      }
+
+      // 即使人口相同，也随机选一方胜利
+      if (candidates.length > 0) {
+        const winnerIndex = Math.floor(Math.random() * candidates.length)
+        const winnerId = candidates[winnerIndex]
+        stats.winner = winnerId
+        stats.gameOver = true
+        // 标记：这是通过 maxTurns + 人口规则强行决出的胜负
+        stats.resolvedByMaxTurns = true
+      }
+    }
+
+    // 计算最终指标（用于评估）
+    const finalState = engine.getState()
+    const { map: finalMap, playerCount } = finalState
+    stats.finalMetrics = {}
     
-    const metrics = {}
-    
-    for (let playerId = 1; playerId <= playerCount; playerId++) {
-      const territories = stats.territories[playerId] || 0
-      const units = stats.units[playerId] || 0
-      const moves = stats.moves[playerId] || 0
-      const isWinner = stats.winner === playerId
-      const isAlive = territories > 0
-      
-      // 基础指标
-      const totalTiles = map.width * map.height
-      const territoryRatio = territories / totalTiles
-      const unitRatio = units / (totalTiles * 10) // 假设平均每格10单位
-      
-      // 效率指标
-      const movesPerTurn = stats.turns > 0 ? moves / stats.turns : 0
-      const unitsPerMove = moves > 0 ? units / moves : 0
-      
-      // 生存指标
-      const survivalTurns = isAlive ? stats.turns : 0
-      
-      metrics[playerId] = {
-        // 基础指标
+    for (let id = 1; id <= playerCount; id++) {
+      let territories = 0
+      let units = 0
+      let strongholds = 0
+      let capital = false
+
+      for (let y = 0; y < finalMap.height; y++) {
+        for (let x = 0; x < finalMap.width; x++) {
+          const tile = finalMap.tiles[y][x]
+          if (tile.owner === id) {
+            territories++
+            units += tile.units || 0
+            if (tile.type === 2) strongholds++
+            if (tile.type === 3) capital = true
+          }
+        }
+      }
+
+      // 简单的评分：领土 + 单位/10 + 要塞*5 + 首都*10
+      const score = territories + units / 10 + strongholds * 5 + (capital ? 10 : 0)
+
+      stats.finalMetrics[id] = {
         territories,
         units,
-        moves,
-        territoryRatio,
-        unitRatio,
-        
-        // 效率指标
-        movesPerTurn,
-        unitsPerMove,
-        
-        // 胜负指标
-        isWinner,
-        isAlive,
-        survivalTurns,
-        
-        // 综合评分（用于排序）
-        score: this.calculateScore({
-          isWinner,
-          isAlive,
-          territoryRatio,
-          unitRatio,
-          movesPerTurn,
-          survivalTurns,
-          turns: stats.turns
-        })
+        strongholds,
+        capital,
+        score
       }
     }
     
-    return metrics
-  }
-
-  /**
-   * 计算综合评分
-   */
-  calculateScore(metrics) {
-    let score = 0
-    
-    // 胜负权重最高
-    if (metrics.isWinner) {
-      score += 1000
+    return {
+      stats,
+      finalState // 返回最终的游戏状态，供RL训练使用
     }
-    
-    // 存活权重
-    if (metrics.isAlive) {
-      score += 100 * metrics.survivalTurns / 100 // 存活回合数
-    }
-    
-    // 领土权重
-    score += 50 * metrics.territoryRatio
-    
-    // 单位权重
-    score += 30 * metrics.unitRatio
-    
-    // 效率权重（较低）
-    score += 10 * Math.min(metrics.movesPerTurn, 1)
-    
-    return score
   }
 }
 
 export default GameSimulator
-
