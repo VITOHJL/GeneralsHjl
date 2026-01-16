@@ -58,7 +58,14 @@ class GameSimulator {
       duration: 0,
       finalMetrics: {},
       // 标记：是否是因为达到 maxTurns 后用人口规则强行判定出的胜负
-      resolvedByMaxTurns: false
+      resolvedByMaxTurns: false,
+      // 记录每个玩家的思考时间（毫秒）
+      thinkTimes: {} // { playerId: [time1, time2, ...] }
+    }
+    
+    // 初始化思考时间记录
+    for (let playerId = 1; playerId <= players; playerId++) {
+      stats.thinkTimes[playerId] = []
     }
     
     let turn = 0
@@ -76,9 +83,18 @@ class GameSimulator {
       const currentPlayer = engine.currentPlayer
       const gameState = engine.getState()
       
-      // 如果是AI玩家，获取AI决策
+      // 如果是AI玩家，获取AI决策（并记录思考时间）
       if (engine.isAIPlayer(currentPlayer)) {
+        const thinkStartTime = Date.now()
         const decision = engine.getAIDecision()
+        const thinkTime = Date.now() - thinkStartTime
+        
+        // 记录思考时间
+        if (!stats.thinkTimes[currentPlayer]) {
+          stats.thinkTimes[currentPlayer] = []
+        }
+        stats.thinkTimes[currentPlayer].push(thinkTime)
+        
         if (decision) {
           engine.makeMove(
             decision.fromX,

@@ -1,0 +1,63 @@
+{
+  "timestamp": "2026-01-16T14:38:54.383Z",
+  "config": {
+    "mapSize": "10x10",
+    "games": 100,
+    "maxTurns": 500,
+    "maxTime": 60000
+  },
+  "results": {
+    "ADAPTIVE": {
+      "wins": 77,
+      "losses": 23,
+      "draws": 0,
+      "timeouts": 0,
+      "total": 100,
+      "totalTurns": 25467,
+      "totalDuration": 3548,
+      "winRate": 77,
+      "avgTurns": 254.67,
+      "avgDuration": 35.48
+    },
+    "MINIMAX": {
+      "wins": 53,
+      "losses": 47,
+      "draws": 0,
+      "timeouts": 0,
+      "total": 100,
+      "totalTurns": 49245,
+      "totalDuration": 42759,
+      "winRate": 53,
+      "avgTurns": 492.45,
+      "avgDuration": 427.59
+    },
+    "STRATEGY_RL": {
+      "wins": 100,
+      "losses": 0,
+      "draws": 0,
+      "timeouts": 0,
+      "total": 100,
+      "totalTurns": 5667,
+      "totalDuration": 1554,
+      "winRate": 100,
+      "avgTurns": 56.67,
+      "avgDuration": 15.54
+    },
+    "QLEARNING_RL": {
+      "wins": 46,
+      "losses": 54,
+      "draws": 0,
+      "timeouts": 0,
+      "total": 100,
+      "totalTurns": 49170,
+      "totalDuration": 6352,
+      "winRate": 46,
+      "avgTurns": 491.7,
+      "avgDuration": 63.52
+    }
+  },
+  "summary": {
+    "totalGames": 400,
+    "totalTime": "54.2"
+  }
+}
